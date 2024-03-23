@@ -42,6 +42,8 @@ class QueuedClosure
      */
     public $catchCallbacks = [];
 
+
+    public $afterCommit = false;
     /**
      * Create a new queued closure event listener resolver.
      *
@@ -105,6 +107,13 @@ class QueuedClosure
         return $this;
     }
 
+    public function afterCommit()
+    {
+        $this->afterCommit = true;
+
+        return $this;
+    }
+
     /**
      * Resolve the actual event listener callback.
      *
@@ -113,13 +122,17 @@ class QueuedClosure
     public function resolve()
     {
         return function (...$arguments) {
-            dispatch(new CallQueuedListener(InvokeQueuedClosure::class, 'handle', [
+            $pendingDispatch = dispatch(new CallQueuedListener(InvokeQueuedClosure::class, 'handle', [
                 'closure' => new SerializableClosure($this->closure),
                 'arguments' => $arguments,
                 'catch' => collect($this->catchCallbacks)->map(function ($callback) {
                     return new SerializableClosure($callback);
                 })->all(),
             ]))->onConnection($this->connection)->onQueue($this->queue)->delay($this->delay);
+
+            if ($this->afterCommit){
+                $pendingDispatch->afterCommit();
+            }
         };
     }
 }
